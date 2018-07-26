@@ -1,13 +1,26 @@
 import React from 'react';
-import axios from 'axios'
+import personService from './services/persons';
+import "./index.css"
 
-const PersonList = ({persons}) => {
+const Message = ({message}) => {
+    if(message === null) {
+        return null
+    } else {
+        return(
+            <div className="error">
+            {message}
+            </div>
+        )
+    }
+}
+
+const PersonList = ({handler, persons}) => {
     // tehtävä 2.10 - refaktorointi
     return (
         <div>
             <table>
                 <tbody>
-                    {persons.map(p => <Person name={p.name} number={p.number} key={p.name}/>)}
+                    {persons.map(p => <Person key={p.id} name={p.name} number={p.number} id={p.id} removeHandler={handler}/>)}
                 </tbody>
             </table>
         </div>
@@ -16,8 +29,8 @@ const PersonList = ({persons}) => {
 
 const Person = (props) => {
     return(
-        <tr>
-            <td>{props.name}</td><td>{props.number}</td>
+        <tr key={props.id}>
+            <td>{props.name}</td><td>{props.number}</td><td><button onClick={()=>{props.removeHandler(props.id)}}>Poista</button></td>
         </tr>
     )
 }
@@ -33,45 +46,117 @@ const FilterForm = (props) => {
 
 class App extends React.Component {
   constructor(props) {
+      // tila juurikomponentissa, tehtävä 2.10
     super(props)
     this.state = {
       persons: [
-        { name: 'Arto Hellas', number: '1234' }
+        { name: 'Arto Hellas', number: '1234', id: 99 }
       ],
       newName: '',
       newNumber: '',
-      filter: ''
+      filter: '',
+      message: null
     }
   }
 
   componentWillMount() {
-      axios
-        .get('http://localhost:3001/persons')
-        .then(response => {
+      personService
+        .getAll()
+        .then(persons => {
             console.log("promise käsitelty componentWillMount metodista")
-            this.setState({persons: response.data})
+            //this.setState({persons: response.data, newName:'',newNumber:'',filter:''})
+            console.log(persons)
+        
+            this.setState({persons})
         })
   }
 
 
+  
+
   addContact = (event) => {
     event.preventDefault()
-    console.log("Painike painaa")
+    console.log("lisäyspainiketta painettu")
     console.log(event.target)
-
+    console.log(event.target.id)
+    
+    
     const personObject = {
         name: this.state.newName,
         number: this.state.newNumber
     }
     console.log(typeof this.state.persons.name)
     if (this.state.persons.map(p=>p.name).includes(personObject.name)===false) {
-        const persons = this.state.persons.concat(personObject)
-        this.setState({
-            persons,
-            newName: '',
-            newNumber: ''
-        })
-    }
+        //const persons = this.state.persons.concat(personObject)
+        personService
+            .create(personObject)
+            .then(response => {
+                personService
+                .getAll()
+                .then(persons => {
+                    console.log("päivitetään sovelluksen tilaa kontaktin lisäämisen jälkeen")
+                    console.log(persons)
+        
+                    this.setState({persons})
+                    this.setState({message:"Lisäys onnistui"})
+                })
+                setTimeout(() => {
+                    this.setState({message: null})
+                  }, 1000)
+            })
+            .catch(error => {
+                console.log("Lisäyksessä tapahtui virhe")
+            })
+        } else {
+            console.log("Tehtävä 2.17 suoritus alkaa")
+            const updateId = this.state.persons.filter(p => p.name === personObject.name)[0].id
+            console.log('Else-haaran arvo id:lle on', updateId)
+            personService
+                .update(updateId, personObject)
+                .then(updatedPerson => {
+                    console.log(updatedPerson)
+                        setTimeout(()=> {
+                            this.setState({message:null})
+                        },5000)
+                })
+                .then(response => {
+                    personService
+                        .getAll()
+                        .then(persons => {
+                            this.setState({persons})
+                            this.setState({message:'Tiedot päivitettiin'})
+                        })
+                })
+                .catch(error => {
+                    console.log('Miten tähän päädyttiin?')
+                    console.log(error)
+                })
+        } 
+  }
+
+
+
+  removePerson = (id) => {
+        console.log("removePerson kutsuttu - tehtävä 2.16",id)
+        personService
+           .remove(id)
+           .then(persons => {
+               console.log(persons)
+               //this.setState({persons})
+               personService
+                .getAll()
+                .then(persons => {
+                    console.log("promise käsitelty componentWillMount metodista")
+                    //this.setState({persons: response.data, newName:'',newNumber:'',filter:''})
+                    console.log(persons)
+                    // tehtävä 2.18
+                    this.setState({persons})
+                    this.setState({message:"Poisto suoritettu"})
+                })
+                setTimeout(()=> {
+                    this.setState({message:null})
+                },5000)
+           })
   }
 
   handleNameChange = (event) => {
@@ -95,7 +180,9 @@ class App extends React.Component {
     console.log(personListToShow)
     return (
         
+    
       <div>
+          <Message message={this.state.message}/>
           <FilterForm selite="Rajaus:" value={this.state.filter} onChangeHandler={this.handleFilter} />
           
         <h2>Puhelinluettelo</h2>
@@ -113,7 +200,7 @@ class App extends React.Component {
           </div>
         </form>
         <h2>Numerot</h2>
-        <PersonList persons={personListToShow} />
+        <PersonList persons={personListToShow} handler={this.removePerson} />
       </div>
     )
   }
